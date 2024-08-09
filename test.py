@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 # Load the image
-image_path = './image/image.jpg'
+image_path = './uploads/image.jpg'
 image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
 
 # Thresholding to differentiate between obstacles and open areas
@@ -28,7 +28,7 @@ image[grid == 0] = 255  # Open areas to white
 image[grid == 1] = 0    # Obstacles to black
 
 # Save or display the image
-cv2.imwrite('./image/converted_image.png', image)
+cv2.imwrite('./uploads/converted_image.png', image)
 
 # To display the image using OpenCV:
 # cv2.imshow('Grid Image', image)
