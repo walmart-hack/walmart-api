@@ -37,31 +37,71 @@
 
 
 
-from pymongo import MongoClient
-from gridfs import GridFS
-import pickle
+# from pymongo import MongoClient
+# from gridfs import GridFS
+# import pickle
 
-# Set up MongoDB client and GridFS
-mongo_client = MongoClient('mongodb://localhost:27017/')
-db = mongo_client['image_database']
-fs = GridFS(db)
+# # Set up MongoDB client and GridFS
+# mongo_client = MongoClient('mongodb://localhost:27017/')
+# db = mongo_client['image_database']
+# fs = GridFS(db)
 
-# Retrieve the metadata document
-metadata = db['floor_maps'].find_one({"image_name": "651c38cd-6fff-43b6-b1ff-a92e76b14367_image.jpg"})  # Replace with your specific query
+# # Retrieve the metadata document
+# metadata = db['floor_maps'].find_one({"image_name": "651c38cd-6fff-43b6-b1ff-a92e76b14367_image.jpg"})  # Replace with your specific query
 
-if metadata:
-    file_id = metadata['grid_file_id']  # Get the file ID from the metadata
+# if metadata:
+#     file_id = metadata['grid_file_id']  # Get the file ID from the metadata
 
-    # Retrieve the grid file from GridFS
-    grid_file = fs.get(file_id)
-    grid_bytes = grid_file.read()  # Read the file's content
+#     # Retrieve the grid file from GridFS
+#     grid_file = fs.get(file_id)
+#     grid_bytes = grid_file.read()  # Read the file's content
     
-    # Deserialize the grid back into a NumPy array
-    grid = pickle.loads(grid_bytes)
+#     # Deserialize the grid back into a NumPy array
+#     grid = pickle.loads(grid_bytes)
 
     
-    # Now `grid` is a NumPy array that you can use
-    print("Grid dimensions:", grid.shape)
-    print("Grid content:\n", grid)
-else:
-    print("No metadata found for the specified image.")
+#     # Now `grid` is a NumPy array that you can use
+#     print("Grid dimensions:", grid.shape)
+#     print("Grid content:\n", grid)
+# else:
+#     print("No metadata found for the specified image.")
+
+
+import numpy as np
+import cv2
+
+grid = np.array([
+    [0, 0, 1, 1, 0],
+    [0, 0, 1, 1, 0],
+    [0, 0, 0, 0, 0],
+    [1, 1, 0, 0, 0],
+    [1, 1, 0, 0, 0],
+])
+
+num_labels, labels_im = cv2.connectedComponents(grid.astype(np.uint8))
+
+forbidden_boxes = []
+
+for label in range(1, num_labels):
+    # Get the mask of the current label
+    mask = (labels_im == label)
+    
+    coords = np.column_stack(np.where(mask))
+
+    top_left = coords.min(axis=0)
+    bottom_right = coords.max(axis=0)
+    
+    top_right = [top_left[0], bottom_right[1]]
+    bottom_left = [bottom_right[0], top_left[1]]
+    
+    forbidden_boxes.append({
+        'top_left': tuple(top_left),
+        'top_right': tuple(top_right),
+        'bottom_left': tuple(bottom_left),
+        'bottom_right': tuple(bottom_right)
+    })
+
+print(f"Number of forbidden boxes: {len(forbidden_boxes)}")
+for i, box in enumerate(forbidden_boxes):
+    print(f"Box {i + 1} corners: {box}")
+

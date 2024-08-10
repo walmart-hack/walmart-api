@@ -1,3 +1,4 @@
+## SETUP
 1. run setup script
 2. run infra_services by going inside the folder and running the following command - 
     ```
