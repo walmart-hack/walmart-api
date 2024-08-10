@@ -5,6 +5,7 @@ from werkzeug.utils import secure_filename
 import pickle
 import uuid
 from dotenv import load_dotenv
+from helper import identify_forbidden_boxes, is_point_in_box
 
 from mongo_client import *
 
@@ -81,7 +82,22 @@ def get_grid():
 
 @app.route('/insert-coordinates', methods=['POST'])
 def insert_coordinates():
-    image_name = request.args.get('image_name')
+    '''
+        Example post request json: 
+        `{
+            "image_name": "example.png",
+            "points": [
+                {"name": "point1", "coordinates": [3, 0]},
+                {"name": "point2", "coordinates": [2, 2]}
+            ]
+        }`
+    '''
+    data = request.json
+    image_name = data.get('image_name')
+    points = data.get("points")
+    if not points:
+        return jsonify({"error": "No points provided"}), 400
+    
     metadata = collection.find_one({"image_name": image_name})
 
     if metadata:
@@ -92,35 +108,27 @@ def insert_coordinates():
         
         grid = pickle.loads(grid_bytes)
         
-        num_labels, labels_im = cv2.connectedComponents(grid.astype(np.uint8))
+        forbidden_boxes = identify_forbidden_boxes(grid)
 
-        forbidden_boxes = []
-
-        for label in range(1, num_labels):
-            # Get the mask of the current label
-            mask = (labels_im == label)
-            
-            coords = np.column_stack(np.where(mask))
-
-            top_left = coords.min(axis=0)
-            bottom_right = coords.max(axis=0)
-            
-            top_right = [top_left[0], bottom_right[1]]
-            bottom_left = [bottom_right[0], top_left[1]]
-            
-            forbidden_boxes.append({
-                'top_left': tuple(top_left),
-                'top_right': tuple(top_right),
-                'bottom_left': tuple(bottom_left),
-                'bottom_right': tuple(bottom_right)
-            })
-
-        print(f"Number of forbidden boxes: {len(forbidden_boxes)}")   
+        point_to_box_map = {}
         
-        for i, box in enumerate(forbidden_boxes):
-            print(f"Box {i + 1} corners: {box}")
+        for point in points:
+            name = point['name']
+            coordinates = point['coordinates']
+            for i, box in enumerate(forbidden_boxes):
+                if is_point_in_box(coordinates, box):
+                    point_to_box_map[name] = i
+                    break
+            else:
+                point_to_box_map[name] = None
 
-        return jsonify({"shape": grid.shape}), 200
+        result = collection.update_one({"image_name": image_name}, {"$set": {"point_to_box_map": point_to_box_map, "forbidden_boxes": forbidden_boxes}})
+
+        if result.matched_count == 0:
+            return {"error": "Failed to update the document"}, 500
+        
+        return jsonify({"status": "success", "shape": grid.shape}), 200
+       
     
     else:
         return jsonify({ "error": "Image not found" }), 404
