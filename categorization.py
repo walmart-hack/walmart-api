@@ -89,7 +89,8 @@ def vectorize_text(text, label):
     text = tf.expand_dims(text, -1)
     return vectorize_layer(text), label
 
-model = load_model(base_url + 'product_category_model.h5')
+model = load_model(base_url + '987model')
+
 # model.compile(optimizer='adam',
 #               loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
 #               metrics=['accuracy'])
@@ -113,3 +114,6 @@ def predict_util(item_list):
         prediction.append(predict_category(item))
 
     return prediction
+
+def list_categories_util():
+    return labels_names

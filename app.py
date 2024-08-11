@@ -143,5 +143,12 @@ def customer_item_list():
 
     return jsonify({"status": "success", "output": prediction}), 200
 
+
+@app.route('/list-categories', methods=['GET'])
+def list_categories():
+    categories = list_categories_util()
+    return jsonify({"status": "success", "categories": categories}), 200
+
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
