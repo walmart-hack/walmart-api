@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from helper import identify_forbidden_boxes, is_point_in_box
 
 from mongo_client import *
+from categorization import *
 
 load_dotenv()
 
@@ -133,6 +134,14 @@ def insert_coordinates():
     else:
         return jsonify({ "error": "Image not found" }), 404
 
+
+@app.route('/customer-item-list', methods=['GET'])
+def customer_item_list():
+    customer_item_list = request.json.get('customer_item_list')
+    
+    prediction = predict_util(customer_item_list)
+
+    return jsonify({"status": "success", "output": prediction}), 200
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

@@ -1,0 +1,3 @@
+- upload list of required items from user (post)  -> output should be the corresponding items in the walmart's inventory
+- list all categories in my walmart shop 
+- get all categories and generate path and draw it on the image 
