@@ -13,8 +13,12 @@ from collections import Counter
 from sklearn.utils import resample
 from tensorflow.keras import layers
 from sklearn.model_selection import train_test_split
+from dotenv import load_dotenv
+import os
 
-base_url = './categorization/'
+load_dotenv()
+
+base_url = os.getenv('CATEGORIZATION_FOLDER_URL')
 
 df = pd.read_csv(base_url + 'data.csv')
 
