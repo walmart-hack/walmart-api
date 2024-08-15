@@ -27,7 +27,7 @@ def convert_to_grid():
     file = request.files['image']
 
     unique_name = str(uuid.uuid4()) + '_' + secure_filename(file.filename)
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_name)
+    filepath = app.config['UPLOAD_FOLDER'] + unique_name
     file.save(filepath)
 
     image = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)

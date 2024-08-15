@@ -18,7 +18,11 @@
     docker-compose up -d
     ```
 
-3. Finally run the server
+3. Finally run the server by going inside app directory
     ```
     python app.py
     ```
+
+
+docker build -t walmart-api-image .
+docker run -d -p 5000:5000 walmart-api-image
