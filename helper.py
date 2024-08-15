@@ -153,7 +153,6 @@ def tsp_nearest_neighbor(waypoints, start_point=None):
     print(waypoints, start_point)
 
     if start_point is not None:
-        # Find and remove the start point from unvisited waypoints
         if start_point in waypoints:
             current = start_point
             unvisited = waypoints[:]
@@ -161,7 +160,6 @@ def tsp_nearest_neighbor(waypoints, start_point=None):
         else:
             raise ValueError("The start point is not in the list of waypoints.")
     else:
-        # If no start point is provided, start from the first point in waypoints
         unvisited = waypoints[:]
         current = unvisited.pop(0)
     
@@ -176,13 +174,33 @@ def tsp_nearest_neighbor(waypoints, start_point=None):
     return visited
 
 
-def draw_path_on_image(image, path):
+def draw_path_on_image(image, path, optimal_order):
     '''
-    Draw the path on the image
+    Draw the path on the image and label the points in the optimal order with a background.
     '''
-    color = hsv2rgb(0,57,85)
-    for i in range(1, len(path)):
+    color = hsv2rgb(0, 57, 85)
+    
+    for i in range(1, len(path), 15):
         cv2.line(image, (path[i-1][1], path[i-1][0]), (path[i][1], path[i][0]), color, 5)
+
+    for index, point in enumerate(optimal_order):
+        text = str(index)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 1
+        thickness = 2
+        text_color = (255, 255, 255)
+        bg_color = (0, 0, 0)
+
+        (text_width, text_height), _ = cv2.getTextSize(text, font, font_scale, thickness)
+        text_offset_x = point[1]
+        text_offset_y = point[0] + 10
+
+        box_coords = ((text_offset_x, text_offset_y), 
+                      (text_offset_x + text_width, text_offset_y - text_height - 10))
+        
+        cv2.rectangle(image, box_coords[0], box_coords[1], bg_color, cv2.FILLED)
+        
+        cv2.putText(image, text, (text_offset_x, text_offset_y - 5), font, font_scale, text_color, thickness, cv2.LINE_AA)
 
 
 
@@ -191,9 +209,14 @@ def filter_forbidden_boxes(forbidden_boxes, mapped_points, categories, start_loc
     Filter forbidden boxes based on categories and start location
     '''
     result = []
-
+    print(categories, mapped_points)
     for i in categories:
-        if mapped_points[i] is not None:
+        if i == 'Food':
+            i = 'Food, Beverages & Tobacco'
+        if i == 'Beverages & Tobacco':
+            continue
+        
+        if i in mapped_points and mapped_points[i] is not None:
             result.append(forbidden_boxes[mapped_points[i]])
 
     if start_location is not None:
