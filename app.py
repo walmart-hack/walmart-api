@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 import cv2
 import numpy as np
 from werkzeug.utils import secure_filename
@@ -139,7 +139,7 @@ def insert_coordinates():
 
 @app.route('/customer-item-list', methods=['POST'])
 def customer_item_list():
-    customer_item_list = request.json
+    customer_item_list = request.json.get('customer_item_list')
     
     prediction = predict_util(customer_item_list)
     print(prediction)
@@ -237,15 +237,23 @@ def draw_path_on_image(image, path):
     for i in range(1, len(path)):
         cv2.line(image, (path[i-1][1], path[i-1][0]), (path[i][1], path[i][0]), (0, 255, 0), 2)
 
-def filter_forbidden_boxes(forbidden_boxes, categories):
-    return [box for box in forbidden_boxes if box['category'] in categories]
+def filter_forbidden_boxes(forbidden_boxes, mapped_points, categories):
+    result = []
+
+    for i in categories:
+        if mapped_points[i] is not None:
+            result.append(forbidden_boxes[mapped_points[i]])
+
+    return result
 
 
 @app.route('/test', methods=['POST'])
 def generate_path():
     data = request.json
     image_name = data.get('image_name')
-    categories_list = data.get("categories") # list of categories
+    categories_list = data.get("categories")
+    start_location, end_location = data.get('start_location'), data.get('end_location')
+
     if not categories_list or not image_name:
         return jsonify({"error": "No categories provided"}), 400
     
@@ -257,14 +265,17 @@ def generate_path():
         grid_file = fs.get(file_id)
         grid_bytes = grid_file.read()
         
+        # load the grid of image
         grid = pickle.loads(grid_bytes)
         
-        forbidden_boxes = identify_forbidden_boxes(grid)
-
-        filtered_forbidden_boxes = filter_forbidden_boxes(forbidden_boxes, categories_list)
+        # filter forbidden boxes
+        forbidden_boxes = metadata['forbidden_boxes']
+        mapped_points = metadata['point_to_box_map']
+        filtered_forbidden_boxes = filter_forbidden_boxes(forbidden_boxes, mapped_points, categories_list)
 
         waypoints = [find_closest_free_point(grid, box) for box in filtered_forbidden_boxes if find_closest_free_point(grid, box) is not None]
 
+        print(len(waypoints), waypoints[0])
 
         optimal_order = tsp_nearest_neighbor(waypoints)
 
@@ -274,7 +285,7 @@ def generate_path():
             full_path.extend(segment_path)
 
         # Load the original image
-        image = cv2.imread('your_image_path.png')
+        image = cv2.imread(os.path.join(UPLOAD_FOLDER, image_name))
 
         # Draw the path
         draw_path_on_image(image, full_path)
@@ -287,6 +298,27 @@ def generate_path():
     
     else:
         return jsonify({ "error": "Image not found" }), 404
+
+
+@app.route('/test2', methods=['POST'])
+def upload_image():
+    data = request.json
+    image_name = data.get('image_name')
+    categories_list = data.get('categories')
+    start_location, end_location = data.get('start_location'), data.get('end_location')
+
+    if not categories_list or not image_name:
+        return jsonify({"error": "No categories or image name provided"}), 400
+
+    # Path to the image on your system
+    image_path = os.path.join(UPLOAD_FOLDER, image_name)
+    print(image_path)
+    
+    if not os.path.exists(image_path):
+        return jsonify({"error": "Image not found"}), 404
+
+    # You can send the image as part of the response using `send_file`
+    return send_file(image_path, mimetype='image/jpeg')
 
 
 if __name__ == '__main__':
