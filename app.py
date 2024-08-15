@@ -5,7 +5,7 @@ from werkzeug.utils import secure_filename
 import pickle
 import uuid
 from dotenv import load_dotenv
-from helper import identify_forbidden_boxes, is_point_in_box
+from helper import *
 
 from mongo_client import *
 from categorization import *
@@ -70,12 +70,6 @@ def get_grid():
         
         grid = pickle.loads(grid_bytes)
 
-
-        # for i in range(grid.shape[0]):
-        #     for j in range(grid.shape[1]):
-        #         print(grid[i][j], end=' ')
-        #     print()
-
         return jsonify({"shape": grid.shape}), 200
     else:
         return jsonify({ "error": "Image not found" }), 404
@@ -110,6 +104,7 @@ def insert_coordinates():
         grid = pickle.loads(grid_bytes)
         
         forbidden_boxes = identify_forbidden_boxes(grid)
+        print(points)
 
         point_to_box_map = {}
         
@@ -127,8 +122,6 @@ def insert_coordinates():
 
         if result.matched_count == 0:
             return {"error": "Failed to update the document"}, 500
-
-        print(forbidden_boxes)
         
         return jsonify({"status": "success", "shape": grid.shape}), 200
        
@@ -153,106 +146,13 @@ def list_categories():
     return jsonify({"status": "success", "categories": categories}), 200
 
 
-def find_closest_free_point(grid, box):
-    h, w = grid.shape
-    points_to_check = []
-
-    # Check all border points around the box
-    for i in range(box['top_left'][0], box['bottom_left'][0] + 1):
-        if box['top_left'][1] - 1 >= 0:
-            points_to_check.append((i, box['top_left'][1] - 1))
-        if box['top_right'][1] + 1 < w:
-            points_to_check.append((i, box['top_right'][1] + 1))
-
-    for j in range(box['top_left'][1], box['top_right'][1] + 1):
-        if box['top_left'][0] - 1 >= 0:
-            points_to_check.append((box['top_left'][0] - 1, j))
-        if box['bottom_left'][0] + 1 < h:
-            points_to_check.append((box['bottom_left'][0] + 1, j))
-
-    # Filter out the points that are within grid bounds and not forbidden
-    free_points = [point for point in points_to_check if grid[point] == 0]
-
-    if free_points:
-        return free_points[0]  # Return the first free point (closest)
-    return None
-
-
-import heapq
-
-def heuristic(a, b):
-    return abs(a[0] - b[0]) + abs(a[1] - b[1])
-
-def a_star(grid, start, goal):
-    h, w = grid.shape
-    open_set = []
-    heapq.heappush(open_set, (0, start))
-    came_from = {}
-    g_score = {start: 0}
-    f_score = {start: heuristic(start, goal)}
-    
-    while open_set:
-        _, current = heapq.heappop(open_set)
-
-        if current == goal:
-            path = []
-            while current in came_from:
-                path.append(current)
-                current = came_from[current]
-            return path[::-1]
-
-        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-            neighbor = (current[0] + dx, current[1] + dy)
-            if 0 <= neighbor[0] < h and 0 <= neighbor[1] < w:
-                if grid[neighbor] == 1:
-                    continue
-
-                tentative_g_score = g_score[current] + 1
-
-                if tentative_g_score < g_score.get(neighbor, float('inf')):
-                    came_from[neighbor] = current
-                    g_score[neighbor] = tentative_g_score
-                    f_score[neighbor] = tentative_g_score + heuristic(neighbor, goal)
-                    heapq.heappush(open_set, (f_score[neighbor], neighbor))
-    
-    return []  # No path found
-
-import itertools
-
-def tsp_nearest_neighbor(waypoints):
-    visited = []
-    unvisited = waypoints[:]
-    current = unvisited.pop(0)
-    visited.append(current)
-    
-    while unvisited:
-        next_point = min(unvisited, key=lambda point: heuristic(current, point))
-        unvisited.remove(next_point)
-        visited.append(next_point)
-        current = next_point
-    
-    return visited
-
-def draw_path_on_image(image, path):
-    for i in range(1, len(path)):
-        cv2.line(image, (path[i-1][1], path[i-1][0]), (path[i][1], path[i][0]), (0, 255, 0), 2)
-
-def filter_forbidden_boxes(forbidden_boxes, mapped_points, categories):
-    result = []
-
-    for i in categories:
-        if mapped_points[i] is not None:
-            result.append(forbidden_boxes[mapped_points[i]])
-
-    return result
-
 
 @app.route('/test', methods=['POST'])
 def generate_path():
     data = request.json
     image_name = data.get('image_name')
     categories_list = data.get("categories")
-    start_location, end_location = data.get('start_location'), data.get('end_location')
+    start_location = data.get('start_location')
 
     if not categories_list or not image_name:
         return jsonify({"error": "No categories provided"}), 400
@@ -271,13 +171,13 @@ def generate_path():
         # filter forbidden boxes
         forbidden_boxes = metadata['forbidden_boxes']
         mapped_points = metadata['point_to_box_map']
-        filtered_forbidden_boxes = filter_forbidden_boxes(forbidden_boxes, mapped_points, categories_list)
+        filtered_forbidden_boxes = filter_forbidden_boxes(forbidden_boxes, mapped_points, categories_list, start_location)
 
         waypoints = [find_closest_free_point(grid, box) for box in filtered_forbidden_boxes if find_closest_free_point(grid, box) is not None]
 
         print(len(waypoints), waypoints[0])
 
-        optimal_order = tsp_nearest_neighbor(waypoints)
+        optimal_order = tsp_nearest_neighbor(waypoints, waypoints[-1])
 
         full_path = []
         for i in range(1, len(optimal_order)):
@@ -300,25 +200,25 @@ def generate_path():
         return jsonify({ "error": "Image not found" }), 404
 
 
-@app.route('/test2', methods=['POST'])
-def upload_image():
-    data = request.json
-    image_name = data.get('image_name')
-    categories_list = data.get('categories')
-    start_location, end_location = data.get('start_location'), data.get('end_location')
+# @app.route('/test2', methods=['POST'])
+# def upload_image():
+#     data = request.json
+#     image_name = data.get('image_name')
+#     categories_list = data.get('categories')
+#     start_location, end_location = data.get('start_location'), data.get('end_location')
 
-    if not categories_list or not image_name:
-        return jsonify({"error": "No categories or image name provided"}), 400
+#     if not categories_list or not image_name:
+#         return jsonify({"error": "No categories or image name provided"}), 400
 
-    # Path to the image on your system
-    image_path = os.path.join(UPLOAD_FOLDER, image_name)
-    print(image_path)
+#     # Path to the image on your system
+#     image_path = os.path.join(UPLOAD_FOLDER, image_name)
+#     print(image_path)
     
-    if not os.path.exists(image_path):
-        return jsonify({"error": "Image not found"}), 404
+#     if not os.path.exists(image_path):
+#         return jsonify({"error": "Image not found"}), 404
 
-    # You can send the image as part of the response using `send_file`
-    return send_file(image_path, mimetype='image/jpeg')
+#     # You can send the image as part of the response using `send_file`
+#     return send_file(image_path, mimetype='image/jpeg')
 
 
 if __name__ == '__main__':
