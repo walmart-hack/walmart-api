@@ -1,11 +1,12 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 import cv2
 import numpy as np
 from werkzeug.utils import secure_filename
 import pickle
 import uuid
 from dotenv import load_dotenv
-from helper import identify_forbidden_boxes, is_point_in_box
+from helper import *
+import json
 
 from mongo_client import *
 from categorization import *
@@ -70,12 +71,6 @@ def get_grid():
         
         grid = pickle.loads(grid_bytes)
 
-
-        # for i in range(grid.shape[0]):
-        #     for j in range(grid.shape[1]):
-        #         print(grid[i][j], end=' ')
-        #     print()
-
         return jsonify({"shape": grid.shape}), 200
     else:
         return jsonify({ "error": "Image not found" }), 404
@@ -110,6 +105,7 @@ def insert_coordinates():
         grid = pickle.loads(grid_bytes)
         
         forbidden_boxes = identify_forbidden_boxes(grid)
+        print(points)
 
         point_to_box_map = {}
         
@@ -135,11 +131,23 @@ def insert_coordinates():
         return jsonify({ "error": "Image not found" }), 404
 
 
-@app.route('/customer-item-list', methods=['GET'])
+@app.route('/customer-item-list', methods=['POST'])
 def customer_item_list():
+    '''
+        Example post request json:
+        `{
+            "customer_item_list": [
+                "item1",
+                "item2",
+                "item3"
+            ]
+        }`
+    '''
+    print(request.json)
     customer_item_list = request.json.get('customer_item_list')
     
     prediction = predict_util(customer_item_list)
+    print(prediction)
 
     return jsonify({"status": "success", "output": prediction}), 200
 
@@ -150,5 +158,77 @@ def list_categories():
     return jsonify({"status": "success", "categories": categories}), 200
 
 
+
+@app.route('/generate-path', methods=['POST'])
+def generate_path():
+    '''
+        Example post request json:
+        `{
+            "image_name": "example.png",
+            "categories": ["category1", "category2"],
+            "start_location": "category3"
+        }`
+    '''
+    data = request.json
+    print(data)
+    image_name = data.get('image_name')
+
+    categories_list = data['categories']
+    categories_list = categories_list.strip('[]').split(', ')
+    # print(categories_list, type(categories_list), categories_list[0])
+
+    start_location = data.get('start_location')
+
+    if not categories_list or not image_name:
+        return jsonify({"error": "No categories provided"}), 400
+    
+    metadata = collection.find_one({"image_name": image_name})
+
+    if metadata:
+        file_id = metadata['grid_file_id']
+
+        grid_file = fs.get(file_id)
+        grid_bytes = grid_file.read()
+        
+        # load the grid of image
+        grid = pickle.loads(grid_bytes)
+        
+        # filter forbidden boxes
+        forbidden_boxes = metadata['forbidden_boxes']
+        mapped_points = metadata['point_to_box_map']
+        filtered_forbidden_boxes = filter_forbidden_boxes(forbidden_boxes, mapped_points, categories_list, start_location)
+
+        waypoints = [find_closest_free_point(grid, box) for box in filtered_forbidden_boxes if find_closest_free_point(grid, box) is not None]
+
+        print(len(waypoints), waypoints[0])
+
+        optimal_order = tsp_nearest_neighbor(waypoints, waypoints[-1])
+        print("OPTIMAL ORDER", optimal_order)
+
+        full_path = []
+        for i in range(1, len(optimal_order)):
+            segment_path = a_star(grid, optimal_order[i-1], optimal_order[i])
+            full_path.extend(segment_path)
+
+
+        image = cv2.imread(os.path.join(UPLOAD_FOLDER, image_name))
+
+ 
+        draw_path_on_image(image, full_path, optimal_order)
+
+        image_path = os.path.join(UPLOAD_FOLDER, 'path_on_image.png')
+
+        cv2.imwrite(image_path, image)
+        print(image_path)
+        
+        if not os.path.exists(image_path):
+            return jsonify({"error": "Image not found"}), 404
+
+        return send_file(image_path, mimetype='image/jpeg'), 200       
+    
+    else:
+        return jsonify({ "error": "Image not found" }), 404
+
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=8000)
