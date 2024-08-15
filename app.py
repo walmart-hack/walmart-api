@@ -5,11 +5,10 @@ from werkzeug.utils import secure_filename
 import pickle
 import uuid
 from dotenv import load_dotenv
-from helper import *
-import json
+from utils.helper import *
 
-from mongo_client import *
-from categorization import *
+from utils.mongo_client import *
+from utils.categorization import *
 
 load_dotenv()
 
@@ -174,8 +173,7 @@ def generate_path():
     image_name = data.get('image_name')
 
     categories_list = data['categories']
-    categories_list = categories_list.strip('[]').split(', ')
-    # print(categories_list, type(categories_list), categories_list[0])
+    categories_list = categories_list.strip('[]').split(', ')  # needed just to fix the format coming from frontend
 
     start_location = data.get('start_location')
 

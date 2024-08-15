@@ -211,6 +211,7 @@ def filter_forbidden_boxes(forbidden_boxes, mapped_points, categories, start_loc
     result = []
     print(categories, mapped_points)
     for i in categories:
+        # these random checks are needed just to fix the format coming from frontend
         if i == 'Food':
             i = 'Food, Beverages & Tobacco'
         if i == 'Beverages & Tobacco':
